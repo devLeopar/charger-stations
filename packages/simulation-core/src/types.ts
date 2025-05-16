@@ -40,6 +40,26 @@ export interface SimulationConfig {
 }
 
 /**
+ * Information about a charger's activity at a specific tick.
+ */
+export interface ChargerTickInfo {
+  isBusy: boolean;
+  powerDrawKW: number;
+  evId?: string;
+}
+
+/**
+ * Log of activity for all chargers over all ticks.
+ * Key: Charger ID
+ * Value: Object mapping Tick (as string) to ChargerTickInfo
+ */
+export interface ChargerActivityLog {
+  [chargerId: string]: {
+    [tick: string]: ChargerTickInfo;
+  };
+}
+
+/**
  * Results of a simulation run.
  */
 export interface SimulationResult {
@@ -50,6 +70,7 @@ export interface SimulationResult {
   concurrencyFactor: number; // actualMaxPowerDemandKW / theoreticalMaxPowerKW
   powerDemandPerTickKW: Record<Tick, number>; // Tracks power demand for each tick
   totalChargingEvents: number;
+  chargerActivityLog?: ChargerActivityLog; // Log of each charger's activity per tick
   // Optional: Further breakdown of events or detailed EV logs if needed later
   // evsProcessed: EV[];
 }

@@ -1,6 +1,6 @@
-import { NextRequest, NextResponse } from 'next/server';
-import { runSimulation, SimulationConfig } from '@reonic/simulation-core';
-import prisma from '../lib/db'; // Import the Prisma client instance
+import { NextRequest, NextResponse } from "next/server";
+import { runSimulation, SimulationConfig } from "@reonic/simulation-core";
+import prisma from "../lib/db"; // Import the Prisma client instance
 
 // console.log("DATABASE_URL in API route:", process.env.DATABASE_URL); // Temporarily commented out
 
@@ -15,11 +15,17 @@ export async function POST(req: NextRequest) {
       consumption, // from request body, maps to evConsumptionKWhPer100km
       rngSeed,
       durationDays,
-      simulationName // Optional name for the simulation from the body
+      simulationName, // Optional name for the simulation from the body
     } = body;
 
     if (numChargers === undefined || powerKW === undefined) {
-      return NextResponse.json({ message: 'Missing required simulation parameters (numChargers, powerKW)' }, { status: 400 });
+      return NextResponse.json(
+        {
+          message:
+            "Missing required simulation parameters (numChargers, powerKW)",
+        },
+        { status: 400 }
+      );
     }
 
     const coreConfig: SimulationConfig = {
@@ -28,7 +34,7 @@ export async function POST(req: NextRequest) {
       arrivalProbabilityMultiplier: arrivalMultiplier ?? 1,
       evConsumptionKWhPer100km: consumption ?? 7.0,
       durationTicks: (durationDays ?? 365) * 24 * 4,
-      rngSeed: rngSeed // if undefined, it will be passed as undefined
+      rngSeed: rngSeed, // if undefined, it will be passed as undefined
     };
 
     const simulationCoreResult = runSimulation(coreConfig);
@@ -48,56 +54,65 @@ export async function POST(req: NextRequest) {
       actualMaxPowerDemandKW: simulationCoreResult.actualMaxPowerDemandKW,
       theoreticalMaxPowerKW: simulationCoreResult.theoreticalMaxPowerKW,
       concurrencyFactor: simulationCoreResult.concurrencyFactor,
-      concurrencyTimelineData: simulationCoreResult.powerDemandPerTickKW, // Use powerDemandPerTickKW for this field
-      // config: coreConfig, // Storing expanded fields instead of a JSON blob for config
-      // result: simulationCoreResult // Storing expanded fields instead of a JSON blob for result
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      concurrencyTimelineData: simulationCoreResult.powerDemandPerTickKW as any,
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      chargerActivityData: simulationCoreResult.chargerActivityLog as any,
     };
 
     const newSimulation = await prisma.simulation.create({
       data: simulationDataForDb,
     });
 
-    return NextResponse.json({
-      message: 'Simulation completed and results stored successfully',
-      simulationId: newSimulation.id,
-      data: newSimulation, // Return the full simulation object created in DB
-    }, { status: 201 });
-
+    return NextResponse.json(
+      {
+        message: "Simulation completed and results stored successfully",
+        simulationId: newSimulation.id,
+        data: newSimulation, // Return the full simulation object created in DB
+      },
+      { status: 201 }
+    );
   } catch (error) {
-    console.error('Error running simulation or storing results:', error);
-    let errorMessage = 'An unexpected error occurred.';
+    console.error("Error running simulation or storing results:", error);
+    let errorMessage = "An unexpected error occurred.";
     if (error instanceof Error) {
       errorMessage = error.message;
     }
-    return NextResponse.json({ message: 'Error in simulation process', error: errorMessage }, { status: 500 });
+    return NextResponse.json(
+      { message: "Error in simulation process", error: errorMessage },
+      { status: 500 }
+    );
   }
 }
 
 export async function GET() {
   try {
     const simulations = await prisma.simulation.findMany({
-      select: { 
+      select: {
         id: true,
         name: true,
         createdAt: true,
         numChargers: true,
-        powerKW: true, 
+        powerKW: true,
         arrivalMultiplier: true,
         evConsumption: true,
         concurrencyFactor: true,
         actualMaxPowerDemandKW: true,
       },
       orderBy: {
-        createdAt: 'desc',
+        createdAt: "desc",
       },
     });
     return NextResponse.json(simulations, { status: 200 });
   } catch (error) {
-    console.error('Error retrieving simulations:', error);
-    let errorMessage = 'An unexpected error occurred.';
+    console.error("Error retrieving simulations:", error);
+    let errorMessage = "An unexpected error occurred.";
     if (error instanceof Error) {
       errorMessage = error.message;
     }
-    return NextResponse.json({ message: 'Error retrieving simulations', error: errorMessage }, { status: 500 });
+    return NextResponse.json(
+      { message: "Error retrieving simulations", error: errorMessage },
+      { status: 500 }
+    );
   }
-} 
+}

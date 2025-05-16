@@ -13,6 +13,8 @@ import {
   Legend,
   ResponsiveContainer,
 } from 'recharts';
+// Import types from simulation-core
+import type { ChargerActivityLog, ChargerTickInfo } from '@reonic/simulation-core/dist/types'; 
 
 interface TickDataPoint {
   tick: number;
@@ -35,7 +37,14 @@ interface SimulationDetailsData {
   theoreticalMaxPowerKW: number;
   concurrencyFactor: number;
   concurrencyTimelineData?: Record<string, number>; // From DB (JSON, keys are stringified ticks)
+  chargerActivityData?: ChargerActivityLog; // Use imported type
   // Add other fields if they are returned by the API endpoint for a single simulation
+}
+
+// Helper type for processed charger activity for display
+interface DisplayChargerActivity {
+  chargerId: string;
+  ticks: (ChargerTickInfo & { tick: string })[];
 }
 
 const SimulationDetailPage: React.FC = () => {
@@ -45,7 +54,8 @@ const SimulationDetailPage: React.FC = () => {
   const [simulationDetails, setSimulationDetails] = useState<SimulationDetailsData | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
-  const [chartData, setChartData] = useState<TickDataPoint[]>([]);
+  const [powerChartData, setPowerChartData] = useState<TickDataPoint[]>([]);
+  const [chargerActivityDisplayData, setChargerActivityDisplayData] = useState<DisplayChargerActivity[]>([]);
 
   useEffect(() => {
     if (!simulationId) return;
@@ -62,17 +72,45 @@ const SimulationDetailPage: React.FC = () => {
         const data: SimulationDetailsData = await response.json();
         setSimulationDetails(data);
 
-        if (data.concurrencyTimelineData) {
-          const transformedData: TickDataPoint[] = Object.entries(
-            data.concurrencyTimelineData
-          )
-          .map(([tickStr, power]) => ({
-            tick: parseInt(tickStr, 10),
-            power: power,
-          }))
-          .sort((a, b) => a.tick - b.tick) // Ensure data is sorted by tick
-          .slice(0, 96); // Show first 96 ticks (1 day)
-          setChartData(transformedData);
+        // Log raw chargerActivityData for debugging
+        // if (data.chargerActivityData) { // Temporarily disable for cleaner console
+        //   console.log('Raw chargerActivityData from API:', JSON.parse(JSON.stringify(data.chargerActivityData))); 
+        // }
+
+        let startTickForActivityDisplay = 0;
+
+        if (data.concurrencyTimelineData && data.theoreticalMaxPowerKW) {
+          const powerTimeLine = Object.entries(data.concurrencyTimelineData)
+            .map(([tickStr, power]) => ({ tick: parseInt(tickStr, 10), power }))
+            .sort((a, b) => a.tick - b.tick);
+
+          const transformedPowerData: TickDataPoint[] = powerTimeLine.slice(0, 96);
+          setPowerChartData(transformedPowerData);
+          
+          // Find the first tick where power demand exceeds 10% of theoretical max
+          const threshold = data.theoreticalMaxPowerKW * 0.10;
+          const firstActiveTick = powerTimeLine.find(p => p.power > threshold);
+          if (firstActiveTick) {
+            startTickForActivityDisplay = firstActiveTick.tick;
+          }
+        }
+
+        if (data.chargerActivityData) {
+          const processedActivity: DisplayChargerActivity[] = Object.entries(data.chargerActivityData)
+            .map(([chargerId, ticksObject]) => ({
+              chargerId,
+              ticks: Object.entries(ticksObject)
+                .map(([tick, tickInfo]) => ({ tick, ...tickInfo }))
+                .sort((a,b) => parseInt(a.tick) - parseInt(b.tick))
+                // Slice from the determined start tick for activity
+                .filter(t => parseInt(t.tick) >= startTickForActivityDisplay)
+                .slice(0, 24), 
+            }));
+          // Log processed charger activity data for debugging
+          // if (processedActivity.length > 0) { // Temporarily disable for cleaner console
+          //   console.log('Processed chargerActivityDisplayData (around activity start):', JSON.parse(JSON.stringify(processedActivity)));
+          // }
+          setChargerActivityDisplayData(processedActivity);
         }
 
       } catch (err) {
@@ -98,9 +136,10 @@ const SimulationDetailPage: React.FC = () => {
     }
   };
   
-  const formatTickToHour = (tick: number) => {
-    const hour = Math.floor((tick % 96) / 4); // 96 ticks in a day, 4 ticks per hour
-    const minute = (tick % 4) * 15;
+  const formatTickToHourMinute = (tick: string | number) => {
+    const numericTick = typeof tick === 'string' ? parseInt(tick, 10) : tick;
+    const hour = Math.floor((numericTick % 96) / 4); 
+    const minute = (numericTick % 4) * 15;
     return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
   };
 
@@ -223,13 +262,13 @@ const SimulationDetailPage: React.FC = () => {
         <h2 className="mb-4 text-xl font-semibold text-gray-700 dark:text-gray-200">
           Power Demand Over First Day (First 96 Ticks)
         </h2>
-        {chartData.length > 0 ? (
+        {powerChartData.length > 0 ? (
           <ResponsiveContainer width="100%" height={400}>
-            <LineChart data={chartData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+            <LineChart data={powerChartData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
               <CartesianGrid strokeDasharray="3 3" />
               <XAxis 
                 dataKey="tick" 
-                tickFormatter={formatTickToHour}
+                tickFormatter={formatTickToHourMinute}
                 label={{ value: 'Time of Day', position: 'insideBottomRight', offset: -10, dy: 10 }}
               />
               <YAxis 
@@ -237,7 +276,7 @@ const SimulationDetailPage: React.FC = () => {
                 allowDecimals={false} 
               />
               <Tooltip 
-                labelFormatter={formatTickToHour}
+                labelFormatter={formatTickToHourMinute}
                 formatter={(value: number) => [`${value.toFixed(2)} kW`, 'Power Demand']}
               />
               <Legend />
@@ -250,6 +289,54 @@ const SimulationDetailPage: React.FC = () => {
               {simulationDetails?.concurrencyTimelineData 
                 ? 'No power demand data to display for the first day.' 
                 : 'Power demand timeline data not available for this simulation.'}
+            </p>
+          </div>
+        )}
+      </section>
+
+      {/* Charger Activity Table */}
+      <section className="mb-8 rounded-lg bg-white p-6 shadow-lg dark:bg-gray-800">
+        <h2 className="mb-4 text-xl font-semibold text-gray-700 dark:text-gray-200">
+          Charger Activity (First 24 Ticks - 6 Hours)
+        </h2>
+        {chargerActivityDisplayData.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="min-w-full table-fixed text-left text-sm">
+              <thead className="bg-gray-100 dark:bg-gray-700">
+                <tr>
+                  <th className="w-1/4 px-4 py-2 font-semibold text-gray-600 dark:text-gray-300">Charger ID</th>
+                  {chargerActivityDisplayData[0]?.ticks.map(t => (
+                    <th key={t.tick} className="px-2 py-2 text-center font-semibold text-gray-600 dark:text-gray-300 whitespace-nowrap">
+                      {formatTickToHourMinute(t.tick)}
+                    </th>
+                  ))}
+                </tr>
+              </thead>
+              <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+                {chargerActivityDisplayData.map(charger => (
+                  <tr key={charger.chargerId}>
+                    <td className="whitespace-nowrap px-4 py-2 font-medium text-gray-800 dark:text-gray-100">{charger.chargerId}</td>
+                    {charger.ticks.map(activity => (
+                      <td key={`${charger.chargerId}-${activity.tick}`} 
+                          className={`px-2 py-2 text-center text-xs 
+                                      ${activity.isBusy ? 'bg-green-200 dark:bg-green-700' : 'bg-red-100 dark:bg-red-800'}
+                                      ${activity.isBusy && activity.powerDrawKW === 0 ? 'bg-yellow-200 dark:bg-yellow-700' : ''} // Should not happen if busy means power > 0
+                                      `}>
+                        {activity.isBusy ? `${activity.powerDrawKW}kW` : 'Free'}
+                        {activity.evId && <span className="block text-gray-500 dark:text-gray-400">({activity.evId.substring(0,5)})</span>}
+                      </td>
+                    ))}
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : (
+          <div className="flex h-40 items-center justify-center text-gray-400 dark:text-gray-500">
+            <p>
+              {simulationDetails?.chargerActivityData
+                ? 'No charger activity data to display for the first 6 hours.'
+                : 'Charger activity data not available for this simulation.'}
             </p>
           </div>
         )}

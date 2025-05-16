@@ -36,6 +36,24 @@ export interface SimulationConfig {
     rngSeed?: number;
 }
 /**
+ * Information about a charger's activity at a specific tick.
+ */
+export interface ChargerTickInfo {
+    isBusy: boolean;
+    powerDrawKW: number;
+    evId?: string;
+}
+/**
+ * Log of activity for all chargers over all ticks.
+ * Key: Charger ID
+ * Value: Object mapping Tick (as string) to ChargerTickInfo
+ */
+export interface ChargerActivityLog {
+    [chargerId: string]: {
+        [tick: string]: ChargerTickInfo;
+    };
+}
+/**
  * Results of a simulation run.
  */
 export interface SimulationResult {
@@ -46,6 +64,7 @@ export interface SimulationResult {
     concurrencyFactor: number;
     powerDemandPerTickKW: Record<Tick, number>;
     totalChargingEvents: number;
+    chargerActivityLog?: ChargerActivityLog;
 }
 /**
  * Structure for T1: Arrival probabilities data.

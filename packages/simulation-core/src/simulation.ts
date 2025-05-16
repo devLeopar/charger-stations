@@ -1,4 +1,4 @@
-import type { SimulationConfig, SimulationResult, Charger, EV, Tick } from './types';
+import type { SimulationConfig, SimulationResult, Charger, EV, Tick, ChargerActivityLog, ChargerTickInfo } from './types';
 import { getArrivalProbabilityForTick } from './data/arrivalProbabilities';
 import { getRandomChargingDemandKWh } from './data/chargingDemandProbabilities';
 import { createSeededRandom } from './utils/rng'; // Import the seeded RNG utility
@@ -21,14 +21,18 @@ export const runSimulation = (config: SimulationConfig): SimulationResult => {
   const random = config.rngSeed !== undefined ? createSeededRandom(config.rngSeed) : Math.random;
 
   const chargers: Charger[] = [];
+  const chargerActivityLog: ChargerActivityLog = {}; // Initialize chargerActivityLog
+
   for (let i = 0; i < config.numChargers; i++) {
+    const newChargerId = generateChargerId();
     chargers.push({
-      id: generateChargerId(),
+      id: newChargerId,
       powerKW: config.chargerPowerKW,
       isAvailable: true,
       currentEVId: undefined,
       occupiedUntilTick: undefined,
     });
+    chargerActivityLog[newChargerId] = {}; // Initialize log for this charger
   }
 
   let totalEnergyConsumedKWh = 0;
@@ -89,9 +93,18 @@ export const runSimulation = (config: SimulationConfig): SimulationResult => {
 
     // 3. Calculate power demand for the current tick and update total energy
     for (const charger of chargers) {
+      let powerDrawKW = 0;
       if (!charger.isAvailable) {
         currentTickPowerDemandKW += charger.powerKW;
+        powerDrawKW = charger.powerKW;
       }
+      // Log charger activity for the current tick
+      const tickInfo: ChargerTickInfo = {
+        isBusy: !charger.isAvailable,
+        powerDrawKW: powerDrawKW,
+        evId: charger.currentEVId,
+      };
+      chargerActivityLog[charger.id][String(tick)] = tickInfo;
     }
     powerDemandPerTickKW[tick] = currentTickPowerDemandKW;
     actualMaxPowerDemandKW = Math.max(actualMaxPowerDemandKW, currentTickPowerDemandKW);
@@ -110,6 +123,7 @@ export const runSimulation = (config: SimulationConfig): SimulationResult => {
     concurrencyFactor,
     powerDemandPerTickKW,
     totalChargingEvents,
+    chargerActivityLog, // Added chargerActivityLog to the results
     // evsProcessed: activeEVs, // If we want to return all EV details
   };
 }; 

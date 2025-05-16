@@ -18,14 +18,17 @@ const runSimulation = (config) => {
     // If a seed is provided, use the seeded generator; otherwise, use Math.random
     const random = config.rngSeed !== undefined ? (0, rng_1.createSeededRandom)(config.rngSeed) : Math.random;
     const chargers = [];
+    const chargerActivityLog = {}; // Initialize chargerActivityLog
     for (let i = 0; i < config.numChargers; i++) {
+        const newChargerId = generateChargerId();
         chargers.push({
-            id: generateChargerId(),
+            id: newChargerId,
             powerKW: config.chargerPowerKW,
             isAvailable: true,
             currentEVId: undefined,
             occupiedUntilTick: undefined,
         });
+        chargerActivityLog[newChargerId] = {}; // Initialize log for this charger
     }
     let totalEnergyConsumedKWh = 0;
     let actualMaxPowerDemandKW = 0;
@@ -75,9 +78,18 @@ const runSimulation = (config) => {
         }
         // 3. Calculate power demand for the current tick and update total energy
         for (const charger of chargers) {
+            let powerDrawKW = 0;
             if (!charger.isAvailable) {
                 currentTickPowerDemandKW += charger.powerKW;
+                powerDrawKW = charger.powerKW;
             }
+            // Log charger activity for the current tick
+            const tickInfo = {
+                isBusy: !charger.isAvailable,
+                powerDrawKW: powerDrawKW,
+                evId: charger.currentEVId,
+            };
+            chargerActivityLog[charger.id][String(tick)] = tickInfo;
         }
         powerDemandPerTickKW[tick] = currentTickPowerDemandKW;
         actualMaxPowerDemandKW = Math.max(actualMaxPowerDemandKW, currentTickPowerDemandKW);
@@ -94,6 +106,7 @@ const runSimulation = (config) => {
         concurrencyFactor,
         powerDemandPerTickKW,
         totalChargingEvents,
+        chargerActivityLog, // Added chargerActivityLog to the results
         // evsProcessed: activeEVs, // If we want to return all EV details
     };
 };
