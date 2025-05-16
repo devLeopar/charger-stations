@@ -1,166 +1,300 @@
 'use client'; // Recharts components are client-side
 
-import React from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
+import Link from 'next/link';
 import {
-  LineChart, Line, BarChart, Bar, XAxis, YAxis,
-  CartesianGrid, Tooltip, Legend, ResponsiveContainer
+  ResponsiveContainer,
+  LineChart,
+  XAxis,
+  YAxis,
+  Tooltip,
+  Legend,
+  CartesianGrid,
+  Line,
 } from 'recharts';
-import { ValueType, NameType, Payload } from 'recharts/types/component/DefaultTooltipContent';
+import { ChargerActivityLog } from '@reonic/simulation-core/dist/types';
+import type { Prisma } from '@/generated/prisma-client';
 
-// Mock data structure similar to SimulationResult from simulation-core
-interface MockDashboardData {
+// Helper function to format tick to HH:MM
+const formatTickToHourMinute = (tick: number): string => {
+  // Modulo 96 for ticks per day to keep time within a 24-hour format for display
+  const displayTickInDay = tick % 96; 
+  const hours = Math.floor((displayTickInDay * 15) / 60);
+  const minutes = (displayTickInDay * 15) % 60;
+  return `${String(hours).padStart(2, '0')}:${String(minutes).padStart(2, '0')}`;
+};
+
+// Types for API data
+interface SimulationListItem {
+  id: string;
+  name: string | null;
+  createdAt: string;
+  numChargers: number;
+  powerKW: number;
+  arrivalMultiplier: number;
+  evConsumption: number;
+  concurrencyFactor: number | null;
+  actualMaxPowerDemandKW: number | null;
+}
+
+// Represents the full simulation data from /api/simulations/[id]
+// We only define fields we know we'll use for now, plus the JSON data.
+
+type FullSimulationData = Omit<Prisma.SimulationGetPayload<object>, 'concurrencyTimelineData' | 'chargerActivityData'> & {
+  concurrencyTimelineData?: Record<string, number>; // Tick (string) -> Power (kW)
+  chargerActivityData?: ChargerActivityLog; // Tick (string) -> ChargerId (string) -> ChargerTickInfo
   totalEnergyConsumedKWh: number;
   actualMaxPowerDemandKW: number;
   theoreticalMaxPowerKW: number;
   concurrencyFactor: number;
-  lastRunDate: string;
-  // Mock data for the concurrency over time chart
-  concurrencyTimeline: { time: string; concurrency: number }[];
-  chargerUsageHourly?: { hour: string; activeChargers: number; totalChargers: number }[]; // Made optional
+};
+
+
+// Types for chart data
+interface ConcurrencyChartPoint {
+  name: string; // Formatted tick, e.g., "00:15"
+  power: number;
 }
 
-// Step 1: Initialize mockData without chargerUsageHourly (or with it as undefined)
-const mockData: MockDashboardData = {
-  totalEnergyConsumedKWh: 60832.75,
-  actualMaxPowerDemandKW: 77.00,
-  theoreticalMaxPowerKW: 220.00, // This will be used for numChargersForHourlyCalc
-  concurrencyFactor: 0.35, // 35%
-  lastRunDate: '2024-07-29',
-  concurrencyTimeline: [
-    { time: '00:00', concurrency: 10 }, { time: '01:00', concurrency: 12 },
-    { time: '02:00', concurrency: 9 },  { time: '03:00', concurrency: 11 },
-    { time: '04:00', concurrency: 15 }, { time: '05:00', concurrency: 18 },
-    { time: '06:00', concurrency: 25 }, { time: '07:00', concurrency: 30 },
-    { time: '08:00', concurrency: 45 }, { time: '09:00', concurrency: 55 },
-    { time: '10:00', concurrency: 60 }, { time: '11:00', concurrency: 62 },
-    { time: '12:00', concurrency: 65 }, { time: '13:00', concurrency: 70 },
-    { time: '14:00', concurrency: 77 }, { time: '15:00', concurrency: 75 },
-    { time: '16:00', concurrency: 70 }, { time: '17:00', concurrency: 68 },
-    { time: '18:00', concurrency: 60 }, { time: '19:00', concurrency: 45 },
-    { time: '20:00', concurrency: 35 }, { time: '21:00', concurrency: 25 },
-    { time: '22:00', concurrency: 18 }, { time: '23:00', concurrency: 15 },
-  ],
-  // chargerUsageHourly will be populated in Step 2
-};
+export default function DashboardPage() {
+  const [simulationsListLoading, setSimulationsListLoading] = useState(true);
+  const [simulationDetailLoading, setSimulationDetailLoading] = useState(false);
+  const [errorMsg, setErrorMsg] = useState<string | null>(null);
+  const [latestSimulationFullData, setLatestSimulationFullData] = useState<FullSimulationData | null>(null);
 
-// Step 2: Populate chargerUsageHourly. Now mockData and mockData.concurrencyTimeline are defined.
-const numChargersForHourlyCalc = mockData.theoreticalMaxPowerKW / 11; // Assuming 11kW per charger
-mockData.chargerUsageHourly = Array.from({ length: 24 }, (_, i) => {
-  const hourStr = i.toString().padStart(2, '0');
-  // mockData.concurrencyTimeline is now accessible
-  const timelineEntry = mockData.concurrencyTimeline.find(c => c.time.startsWith(hourStr));
-  const concurrencyForHour = timelineEntry ? timelineEntry.concurrency : 30; // Default to 30%
+  const [concurrencyChartDataProcessed, setConcurrencyChartDataProcessed] = useState<ConcurrencyChartPoint[]>([]);
 
-  let active = Math.floor(numChargersForHourlyCalc * (concurrencyForHour / 100) * (0.8 + Math.random() * 0.4));
-  active = Math.min(numChargersForHourlyCalc, Math.max(0, active));
+  const processConcurrencyData = useCallback((
+    timelineData?: Record<string, number>
+  ): ConcurrencyChartPoint[] => {
+    if (!timelineData) return [];
+    const data: ConcurrencyChartPoint[] = [];
+    for (let i = 0; i < 96; i++) {
+      const tickKey = String(i);
+      data.push({
+        name: formatTickToHourMinute(i),
+        power: timelineData[tickKey] || 0,
+      });
+    }
+    return data;
+  }, []);
+
+  const fetchSimulationDetails = useCallback(async (id: string) => {
+    setSimulationDetailLoading(true);
+    setErrorMsg(null);
+    try {
+      const response = await fetch(`/api/simulations/${id}`);
+      if (!response.ok) {
+        throw new Error(`Failed to fetch simulation details for ID: ${id}`);
+      }
+      const data: FullSimulationData = await response.json();
+      setLatestSimulationFullData(data);
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'An unknown error occurred while fetching simulation details.');
+      setLatestSimulationFullData(null);
+    } finally {
+      setSimulationDetailLoading(false);
+    }
+  }, []);
+
+  const fetchLatestSimulationId = useCallback(async () => {
+    setSimulationsListLoading(true);
+    setErrorMsg(null);
+    try {
+      const response = await fetch('/api/simulations');
+      if (!response.ok) {
+        throw new Error('Failed to fetch simulations list');
+      }
+      const simulations: SimulationListItem[] = await response.json();
+      if (simulations.length > 0) {
+        return simulations[0].id; // API returns sorted by createdAt desc
+      }
+      return null;
+    } catch (err) {
+      setErrorMsg(err instanceof Error ? err.message : 'An unknown error occurred while fetching simulations list.');
+      return null;
+    } finally {
+      setSimulationsListLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    fetchLatestSimulationId().then(latestId => {
+      if (latestId) {
+        fetchSimulationDetails(latestId);
+      } else if (!errorMsg) {
+        // No error from fetching list, and no simulations found handled in JSX
+      }
+    });
+  }, [fetchLatestSimulationId, fetchSimulationDetails, errorMsg]);
   
-  return {
-    hour: `${hourStr}:00`,
-    activeChargers: active,
-    totalChargers: numChargersForHourlyCalc,
-  };
-});
+   useEffect(() => {
+    if (latestSimulationFullData) {
+      setConcurrencyChartDataProcessed(
+        processConcurrencyData(latestSimulationFullData.concurrencyTimelineData)
+      );
+    } else {
+      setConcurrencyChartDataProcessed([]);
+    }
+  }, [latestSimulationFullData, processConcurrencyData]);
 
-const DashboardPage: React.FC = () => {
+
+  if (simulationsListLoading || simulationDetailLoading) {
+    return (
+      <div className="flex items-center justify-center h-full p-4">
+        <p className="text-lg text-gray-700 dark:text-gray-300">Loading dashboard data...</p>
+      </div>
+    );
+  }
+
+  if (errorMsg && !latestSimulationFullData) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full p-4">
+        <p className="text-lg text-red-500 dark:text-red-400">{errorMsg}</p>
+        <button 
+           onClick={() => { 
+             fetchLatestSimulationId().then((id: string | null) => { // Explicitly type id
+               if (id) {
+                 fetchSimulationDetails(id);
+               } else if (!errorMsg) {
+                  // This case (no simulations found after retry) will be handled by the next conditional block
+               }
+             });
+           }} 
+           className="mt-4 px-4 py-2 bg-indigo-600 text-white rounded hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-50"
+        >
+          Try Again
+        </button>
+         <Link href="/simulate" passHref className="mt-2">
+            <a className="px-4 py-2 border border-indigo-600 text-indigo-600 rounded hover:bg-indigo-100 dark:text-indigo-400 dark:border-indigo-500 dark:hover:bg-gray-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-50">
+              Run New Simulation
+            </a>
+          </Link>
+      </div>
+    );
+  }
+  
+  if (!latestSimulationFullData && !simulationsListLoading && !simulationDetailLoading && !errorMsg) {
+    return (
+      <div className="flex flex-col items-center justify-center h-full p-4">
+        <p className="text-lg text-gray-700 dark:text-gray-300">No simulation data available.</p>
+        <p className="text-md text-gray-500 dark:text-gray-400 mb-4">
+          Run a simulation to populate the dashboard.
+        </p>
+        <Link href="/simulate" passHref>
+          <a className="px-6 py-3 bg-indigo-600 text-white font-semibold rounded-md shadow-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-opacity-50">
+            Create New Simulation
+          </a>
+        </Link>
+      </div>
+    );
+  }
+  
+
   return (
-    <div className="container mx-auto px-4 py-8">
-      <h1 className="mb-6 text-3xl font-bold text-gray-800">Dashboard</h1>
+    <div className="flex-1 space-y-6 p-4 md:p-8 pt-6 bg-gray-50 dark:bg-gray-900 text-gray-800 dark:text-gray-100">
+      <div className="flex items-center justify-between space-y-2">
+        <h2 className="text-3xl font-bold tracking-tight text-gray-800 dark:text-gray-100">Dashboard Overview</h2>
+      </div>
+      {latestSimulationFullData && (
+        <p className="text-sm text-gray-600 dark:text-gray-400">
+          Displaying data for the latest simulation: {latestSimulationFullData.name || `ID: ${latestSimulationFullData.id.substring(0,8)}...`} (Completed: {new Date(latestSimulationFullData.createdAt).toLocaleString()})
+        </p>
+      )}
 
-      {/* Summary Cards Section */}
-      <section className="mb-8 grid grid-cols-1 gap-6 md:grid-cols-2 lg:grid-cols-3">
-        <div className="rounded-lg bg-white p-6 shadow-lg">
-          <h2 className="mb-2 text-xl font-semibold text-gray-700">Total Energy Consumed</h2>
-          <p className="text-3xl font-bold text-indigo-600">
-            {mockData.totalEnergyConsumedKWh.toFixed(2)} kWh
-          </p>
-          <p className="text-sm text-gray-500">Last simulation run: {mockData.lastRunDate}</p>
+      <div className="grid gap-6 md:grid-cols-2 lg:grid-cols-7">
+        {/* Concurrency Chart Card */}
+        <div className="col-span-4 bg-white dark:bg-gray-800 shadow-lg rounded-lg">
+          <div className="p-6">
+            <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-200">Concurrency Over Time (First 24 Hours)</h3>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+              Total power demand from all chargers over the first day of the latest simulation.
+            </p>
+          </div>
+          <div className="pl-2 pr-2 pb-6">
+            {concurrencyChartDataProcessed.length > 0 && latestSimulationFullData ? (
+              <ResponsiveContainer width="100%" height={350}>
+                <LineChart data={concurrencyChartDataProcessed}>
+                  <CartesianGrid strokeDasharray="3 3" stroke="#4A5568" />
+                  <XAxis
+                    dataKey="name"
+                    stroke="#A0AEC0" 
+                    fontSize={12}
+                    tickLine={false}
+                    axisLine={false}
+                  />
+                  <YAxis
+                    stroke="#A0AEC0"
+                    fontSize={12}
+                    tickLine={false}
+                    axisLine={false}
+                    tickFormatter={(value) => `${value} kW`}
+                    label={{ value: 'Power Demand (kW)', angle: -90, position: 'insideLeft', fill: '#A0AEC0', fontSize: 12, dx: -5 }}
+                  />
+                  <Tooltip
+                    formatter={(value: number) => [`${value.toFixed(2)} kW`, 'Power Demand']}
+                    labelFormatter={(label: string) => `Time: ${label}`}
+                    contentStyle={{ backgroundColor: 'rgba(255, 255, 255, 0.9)', borderRadius: '0.5rem', borderColor: '#CBD5E0' }}
+                    labelStyle={{ color: '#2D3748' }}
+                    itemStyle={{ color: '#2D3748' }}
+                  />
+                  <Legend wrapperStyle={{ color: '#4A5568' }}/>
+                  <Line
+                    type="monotone"
+                    dataKey="power"
+                    strokeWidth={2}
+                    stroke="#667EEA" // Indigo
+                    activeDot={{ r: 6, fill: '#667EEA', stroke: '#FFF' }}
+                    dot={false}
+                    name="Total Power Demand"
+                  />
+                </LineChart>
+              </ResponsiveContainer>
+            ) : (
+              <p className="text-center text-gray-500 dark:text-gray-400 py-10">
+                {latestSimulationFullData ? 'No concurrency data available.' : 'Loading data...'}
+              </p>
+            )}
+          </div>
         </div>
 
-        <div className="rounded-lg bg-white p-6 shadow-lg">
-          <h2 className="mb-2 text-xl font-semibold text-gray-700">Peak Power Demand</h2>
-          <p className="text-3xl font-bold text-indigo-600">
-            {mockData.actualMaxPowerDemandKW.toFixed(2)} kW
-          </p>
-          <p className="text-sm text-gray-500">
-            Actual vs Theoretical ({mockData.theoreticalMaxPowerKW.toFixed(2)} kW)
-          </p>
+        {/* Latest Simulation Highlights Card */}
+        <div className="col-span-4 lg:col-span-3 bg-white dark:bg-gray-800 shadow-lg rounded-lg">
+          <div className="p-6">
+            <h3 className="text-xl font-semibold text-gray-700 dark:text-gray-200">Latest Simulation Highlights</h3>
+            {latestSimulationFullData ? (
+              <ul className="mt-4 space-y-2 text-sm">
+                <li className="flex justify-between">
+                  <span className="text-gray-500 dark:text-gray-400">Total Energy Consumed:</span>
+                  <span className="font-medium text-gray-700 dark:text-gray-200">{latestSimulationFullData.totalEnergyConsumedKWh.toFixed(2)} kWh</span>
+                </li>
+                <li className="flex justify-between">
+                  <span className="text-gray-500 dark:text-gray-400">Actual Peak Power:</span>
+                  <span className="font-medium text-gray-700 dark:text-gray-200">{latestSimulationFullData.actualMaxPowerDemandKW.toFixed(2)} kW</span>
+                </li>
+                <li className="flex justify-between">
+                  <span className="text-gray-500 dark:text-gray-400">Concurrency Factor:</span>
+                  <span className="font-medium text-gray-700 dark:text-gray-200">{(latestSimulationFullData.concurrencyFactor * 100).toFixed(2)}%</span>
+                </li>
+                <li className="flex justify-between">
+                  <span className="text-gray-500 dark:text-gray-400">Number of Chargers:</span>
+                  <span className="font-medium text-gray-700 dark:text-gray-200">{latestSimulationFullData.numChargers}</span>
+                </li>
+                <li className="flex justify-between">
+                  <span className="text-gray-500 dark:text-gray-400">Charger Power (each):</span>
+                  <span className="font-medium text-gray-700 dark:text-gray-200">{latestSimulationFullData.powerKW} kW</span>
+                </li>
+                 <li className="flex justify-between">
+                  <span className="text-gray-500 dark:text-gray-400">Theoretical Max Power:</span>
+                  <span className="font-medium text-gray-700 dark:text-gray-200">{latestSimulationFullData.theoreticalMaxPowerKW.toFixed(2)} kW</span>
+                </li>
+              </ul>
+            ) : (
+              <p className="text-center text-gray-500 dark:text-gray-400 py-10">No simulation data loaded.</p>
+            )}
+          </div>
         </div>
-
-        <div className="rounded-lg bg-white p-6 shadow-lg">
-          <h2 className="mb-2 text-xl font-semibold text-gray-700">Concurrency Factor</h2>
-          <p className="text-3xl font-bold text-indigo-600">
-            {(mockData.concurrencyFactor * 100).toFixed(2)} %
-          </p>
-          <p className="text-sm text-gray-500">Efficiency of charger usage</p>
-        </div>
-      </section>
-
-      {/* Charts Section */}
-      <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <div className="h-[400px] rounded-lg bg-white p-6 shadow-lg">
-          <h2 className="mb-4 text-xl font-semibold text-gray-700">Concurrency Over Time (Mock Daily)</h2>
-          <ResponsiveContainer width="100%" height="100%">
-            <LineChart data={mockData.concurrencyTimeline}
-              margin={{ top: 5, right: 20, left: 10, bottom: 5 }}> {/* Adjusted margins */}
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="time" />
-              <YAxis 
-                label={{ 
-                  value: 'Concurrency %', 
-                  angle: -90, 
-                  position: 'insideLeft', 
-                  offset: -5, // Adjusted offset
-                  style: {fontSize: '0.875rem', fill: '#4A5568'} // Added style
-                }} 
-                unit="%" // Added unit to YAxis for clarity
-              />
-              <Tooltip formatter={(value: ValueType) => {
-                if (typeof value === 'number') {
-                  return `${value.toFixed(0)}%`; // Format to whole number percentage
-                }
-                return value as React.ReactNode;
-              }} />
-              <Legend />
-              <Line type="monotone" dataKey="concurrency" stroke="#4f46e5" strokeWidth={2} activeDot={{ r: 8 }} name="Concurrency" unit="%" />
-            </LineChart>
-          </ResponsiveContainer>
-        </div>
-
-        <div className="h-[400px] rounded-lg bg-white p-6 shadow-lg">
-          <h2 className="mb-4 text-xl font-semibold text-gray-700">Charger Usage Per Hour (Mock Daily)</h2>
-          <ResponsiveContainer width="100%" height="100%">
-            <BarChart 
-              data={mockData.chargerUsageHourly}
-              margin={{ top: 5, right: 20, left: 10, bottom: 5 }} // Adjusted margins
-            >
-              <CartesianGrid strokeDasharray="3 3" />
-              <XAxis dataKey="hour" />
-              <YAxis 
-                allowDecimals={false} 
-                label={{ 
-                  value: 'Active Chargers', 
-                  angle: -90, 
-                  position: 'insideLeft', 
-                  offset: -5, // Adjusted offset
-                  style: {fontSize: '0.875rem', fill: '#4A5568'} // Added style
-                }} 
-              />
-              <Tooltip formatter={(value: ValueType, name: NameType, item: Payload<ValueType, NameType>) => {
-                const dataPoint = item.payload;
-                if (dataPoint && dataPoint.totalChargers !== undefined && name === 'activeChargers') {
-                  return [`${value} / ${dataPoint.totalChargers}`, 'Active / Total'];
-                }
-                // Fallback for other potential data keys or if totalChargers is not present
-                return [value as React.ReactNode, name as React.ReactNode]; 
-              }} />
-              <Legend />
-              <Bar dataKey="activeChargers" fill="#818cf8" name="Active Chargers" />
-            </BarChart>
-          </ResponsiveContainer>
-        </div>
-      </section>
+      </div>
     </div>
   );
-};
-
-export default DashboardPage; 
+} 
