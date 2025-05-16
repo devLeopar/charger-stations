@@ -2,3 +2,5 @@ TODO.md
 packages/simulation-core/node_modules
 node_modules
 .env
+apps/frontend/src/generated/*
+apps/frontend/src/generated/prisma-client/*
