@@ -1,6 +1,7 @@
 import type { SimulationConfig, SimulationResult, Charger, EV, Tick } from './types';
 import { getArrivalProbabilityForTick } from './data/arrivalProbabilities';
 import { getRandomChargingDemandKWh } from './data/chargingDemandProbabilities';
+import { createSeededRandom } from './utils/rng'; // Import the seeded RNG utility
 
 // Simple ID generator for EVs for this simulation instance
 let evIdCounter = 0;
@@ -14,6 +15,10 @@ export const runSimulation = (config: SimulationConfig): SimulationResult => {
   // Reset counters for multiple simulation runs if this function is called multiple times in the same context
   evIdCounter = 0;
   chargerIdCounter = 0;
+
+  // Initialize the random number generator
+  // If a seed is provided, use the seeded generator; otherwise, use Math.random
+  const random = config.rngSeed !== undefined ? createSeededRandom(config.rngSeed) : Math.random;
 
   const chargers: Charger[] = [];
   for (let i = 0; i < config.numChargers; i++) {
@@ -53,9 +58,11 @@ export const runSimulation = (config: SimulationConfig): SimulationResult => {
       const baseArrivalProbability = getArrivalProbabilityForTick(tick);
       const actualArrivalProbability = baseArrivalProbability * config.arrivalProbabilityMultiplier;
 
-      // TODO: Implement seeded RNG if config.rngSeed is provided
-      if (Math.random() < actualArrivalProbability) {
-        const chargingDemandKWh = getRandomChargingDemandKWh(config.evConsumptionKWhPer100km);
+      if (random() < actualArrivalProbability) { // Use the configured random generator
+        const chargingDemandKWh = getRandomChargingDemandKWh(
+          config.evConsumptionKWhPer100km,
+          random // Pass the configured random generator
+        );
 
         if (chargingDemandKWh > 0 && charger.isAvailable) {
           totalChargingEvents++;

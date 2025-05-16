@@ -35,10 +35,14 @@ export const parsedChargingDemands: ChargingDemand[] = Object.entries(
 /**
  * Helper function to get a random charging demand based on the probabilities.
  * @param evConsumptionKWhPer100km The EV's energy consumption rate.
+ * @param randomGenerator A function that returns a random number between 0 and 1.
  * @returns The charging demand in kWh, or 0 if the EV doesn't charge.
  */
-export const getRandomChargingDemandKWh = (evConsumptionKWhPer100km: number): number => {
-  const rand = Math.random();
+export const getRandomChargingDemandKWh = (
+  evConsumptionKWhPer100km: number,
+  randomGenerator: () => number
+): number => {
+  const rand = randomGenerator(); // Use the provided generator
   let cumulativeProbability = 0;
 
   for (const demand of parsedChargingDemands) {
