@@ -297,7 +297,7 @@ const SimulationDetailPage: React.FC = () => {
       {/* Charger Activity Table */}
       <section className="mb-8 rounded-lg bg-white p-6 shadow-lg dark:bg-gray-800">
         <h2 className="mb-4 text-xl font-semibold text-gray-700 dark:text-gray-200">
-          Charger Activity (First 24 Ticks - 6 Hours)
+          Charger Activity Details (Excerpt from Active Period)
         </h2>
         {chargerActivityDisplayData.length > 0 ? (
           <div className="overflow-x-auto">
@@ -335,22 +335,14 @@ const SimulationDetailPage: React.FC = () => {
           <div className="flex h-40 items-center justify-center text-gray-400 dark:text-gray-500">
             <p>
               {simulationDetails?.chargerActivityData
-                ? 'No charger activity data to display for the first 6 hours.'
+                ? 'No significant charger activity data to display for the excerpt.'
                 : 'Charger activity data not available for this simulation.'}
             </p>
           </div>
         )}
       </section>
 
-      {/* Placeholder for Charger Utilization Map */}
-      <section className="rounded-lg bg-white p-6 shadow-lg dark:bg-gray-800">
-        <h2 className="mb-4 text-xl font-semibold text-gray-700 dark:text-gray-200">Charger Utilization Map (SVG)</h2>
-        <div className="flex h-64 items-center justify-center text-gray-400 dark:text-gray-500">
-          <p>(SVG Grid map placeholder - Data not yet available in this view)</p>
-        </div>
-      </section>
-
-      {/* Placeholder for Raw Data or Event Log if needed */}
+      {/* Detailed Event Log placeholder - kept for potential future use */}
       <section className="mt-8 rounded-lg bg-white p-6 shadow-lg dark:bg-gray-800">
         <h2 className="mb-4 text-xl font-semibold text-gray-700 dark:text-gray-200">Detailed Event Log / Tick Data</h2>
         <p className="text-gray-500 dark:text-gray-400">
