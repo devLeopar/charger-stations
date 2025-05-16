@@ -8,8 +8,8 @@
         "build:frontend": "npm run build --workspace=frontend",
         "lint:frontend": "npm run lint --workspace=frontend",
         "build:simulation-core": "npm run build --workspace=@reonic/simulation-core",
-        "prisma:migrate": "dotenv -e .env -- npm exec --workspace=frontend -- prisma migrate dev --schema=../../prisma/schema.prisma",
-        "prisma:generate": "dotenv -e .env -- npm exec --workspace=frontend -- prisma generate --schema=../../prisma/schema.prisma"
+        "prisma:migrate": "npm exec --workspace=frontend -- prisma migrate dev --schema=../../prisma/schema.prisma",
+        "prisma:generate": "npm exec --workspace=frontend -- prisma generate --schema=../../prisma/schema.prisma"
     },
     "workspaces": [
         "apps/*",
@@ -18,8 +18,5 @@
     "engines": {
         "node": ">=18.0.0",
         "npm": ">=9.0.0"
-    },
-    "devDependencies": {
-        "dotenv-cli": "^8.0.0"
     }
 }
