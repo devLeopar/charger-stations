@@ -141,4 +141,23 @@ const main = () => {
 };
 
 // Run the simulation
-main(); 
+main();
+
+// --- Exports for library usage ---
+// This allows the simulation-core to be used as a package by other applications (e.g., frontend)
+export { runSimulation } from './simulation';
+export type {
+  SimulationConfig,
+  SimulationResult,
+  // Add other types that might be useful for consumers of this package
+  Charger,
+  EV,
+  Tick,
+  ArrivalProbabilityData,
+  HourlyArrivalProbability,
+  ChargingDemandData,
+  ChargingDemand,
+  // Assuming SimulationInputParameters is defined and exported from ./types
+  // If not, you might need to define/export it or remove it from this list
+  // SimulationInputParameters 
+} from './types'; 

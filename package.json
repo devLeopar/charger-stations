@@ -1,0 +1,22 @@
+{
+    "name": "reonic-takehome-monorepo",
+    "private": true,
+    "version": "1.0.0",
+    "description": "Reonic EV Charging Simulation Take-Home Task",
+    "scripts": {
+        "dev:frontend": "npm run dev --workspace=frontend",
+        "build:frontend": "npm run build --workspace=frontend",
+        "lint:frontend": "npm run lint --workspace=frontend",
+        "build:simulation-core": "npm run build --workspace=@reonic/simulation-core",
+        "prisma:migrate": "npm run prisma migrate dev --workspace=frontend",
+        "prisma:generate": "npm run prisma generate --workspace=frontend"
+    },
+    "workspaces": [
+        "apps/*",
+        "packages/*"
+    ],
+    "engines": {
+        "node": ">=18.0.0",
+        "npm": ">=9.0.0"
+    }
+}

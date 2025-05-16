@@ -1,5 +1,27 @@
 {
+  "name": "@reonic/simulation-core",
+  "version": "1.0.0",
+  "description": "Core simulation logic for EV charging.",
+  "main": "dist/index.js",
+  "types": "dist/index.d.ts",
+  "scripts": {
+    "build": "tsc",
+    "dev": "tsc -w",
+    "test": "echo \"Error: no test specified yet for simulation-core\" && exit 1"
+  },
+  "keywords": [
+    "simulation",
+    "ev-charging"
+  ],
+  "author": "Reonic-Oktar",
+  "license": "ISC",
   "devDependencies": {
-    "@types/node": "^22.15.18"
-  }
+    "@types/node": "^20.14.12",
+    "typescript": "^5.5.4"
+  },
+  "files": [
+    "dist",
+    "src",
+    "README.md"
+  ]
 }
