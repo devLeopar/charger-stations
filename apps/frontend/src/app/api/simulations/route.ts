@@ -75,17 +75,19 @@ export async function POST(req: NextRequest) {
 export async function GET() {
   try {
     const simulations = await prisma.simulation.findMany({
-      select: { // Select specific fields for the summary list
+      select: { 
         id: true,
         name: true,
         createdAt: true,
         numChargers: true,
-        powerKW: true, // As per schema.prisma field name
+        powerKW: true, 
+        arrivalMultiplier: true,
+        evConsumption: true,
         concurrencyFactor: true,
         actualMaxPowerDemandKW: true,
       },
       orderBy: {
-        createdAt: 'desc', // Show newest first
+        createdAt: 'desc',
       },
     });
     return NextResponse.json(simulations, { status: 200 });
