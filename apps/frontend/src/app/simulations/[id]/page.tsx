@@ -14,7 +14,10 @@ const SimulationDetailPage: React.FC = () => {
   return (
     <div className="container mx-auto px-4 py-8">
       <div className="mb-6">
-        <Link href="/simulations" className="text-indigo-600 hover:text-indigo-800 hover:underline">
+        <Link 
+          href="/simulations" 
+          className="text-indigo-600 hover:text-indigo-800 hover:underline"
+        >
           &larr; Back to Simulations List
         </Link>
       </div>

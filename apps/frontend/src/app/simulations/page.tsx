@@ -21,7 +21,10 @@ const SimulationsPage: React.FC = () => {
     <div className="container mx-auto px-4 py-8">
       <div className="mb-6 flex items-center justify-between">
         <h1 className="text-3xl font-bold text-gray-800">Simulations</h1>
-        <Link href="/simulate" className="rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white shadow-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2">
+        <Link 
+          href="/simulate" 
+          className="rounded-lg bg-indigo-600 px-4 py-2 font-semibold text-white shadow-md hover:bg-indigo-700 focus:outline-none focus:ring-2 focus:ring-indigo-500 focus:ring-offset-2"
+        >
           + Create New Simulation
         </Link>
       </div>
@@ -56,7 +59,10 @@ const SimulationsPage: React.FC = () => {
                   <td className="px-6 py-4 text-center">{sim.chargerPowerKW}</td>
                   <td className="px-6 py-4 text-center">{sim.arrivalMultiplier}</td>
                   <td className="px-6 py-4 text-center">
-                    <Link href={`/simulations/${sim.id}`} className="font-medium text-indigo-600 hover:underline focus:outline-none focus:ring-2 focus:ring-indigo-400">
+                    <Link 
+                      href={`/simulations/${sim.id}`} 
+                      className="font-medium text-indigo-600 hover:underline focus:outline-none focus:ring-2 focus:ring-indigo-400"
+                    >
                       View
                     </Link>
                     {/* Add Delete button/action here later */}
