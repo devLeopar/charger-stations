@@ -48,6 +48,7 @@ export async function POST(req: NextRequest) {
       actualMaxPowerDemandKW: simulationCoreResult.actualMaxPowerDemandKW,
       theoreticalMaxPowerKW: simulationCoreResult.theoreticalMaxPowerKW,
       concurrencyFactor: simulationCoreResult.concurrencyFactor,
+      concurrencyTimelineData: simulationCoreResult.powerDemandPerTickKW, // Use powerDemandPerTickKW for this field
       // config: coreConfig, // Storing expanded fields instead of a JSON blob for config
       // result: simulationCoreResult // Storing expanded fields instead of a JSON blob for result
     };

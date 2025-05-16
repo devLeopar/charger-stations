@@ -9,7 +9,7 @@ interface RouteContext {
 
 export async function GET(req: NextRequest, { params }: RouteContext) {
   try {
-    const { id } = params;
+    const { id } = await params;
 
     if (!id) {
       return NextResponse.json({ message: 'Simulation ID is required' }, { status: 400 });

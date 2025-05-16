@@ -3,6 +3,21 @@
 import React, { useState, useEffect } from 'react';
 import { useParams } from 'next/navigation'; // To get the [id] from the URL
 import Link from 'next/link';
+import {
+  LineChart,
+  Line,
+  XAxis,
+  YAxis,
+  CartesianGrid,
+  Tooltip,
+  Legend,
+  ResponsiveContainer,
+} from 'recharts';
+
+interface TickDataPoint {
+  tick: number;
+  power: number;
+}
 
 // Interface matching the Prisma Simulation model and API response for a single simulation
 interface SimulationDetailsData {
@@ -19,6 +34,7 @@ interface SimulationDetailsData {
   actualMaxPowerDemandKW: number;
   theoreticalMaxPowerKW: number;
   concurrencyFactor: number;
+  concurrencyTimelineData?: Record<string, number>; // From DB (JSON, keys are stringified ticks)
   // Add other fields if they are returned by the API endpoint for a single simulation
 }
 
@@ -29,6 +45,7 @@ const SimulationDetailPage: React.FC = () => {
   const [simulationDetails, setSimulationDetails] = useState<SimulationDetailsData | null>(null);
   const [isLoading, setIsLoading] = useState<boolean>(true);
   const [error, setError] = useState<string | null>(null);
+  const [chartData, setChartData] = useState<TickDataPoint[]>([]);
 
   useEffect(() => {
     if (!simulationId) return;
@@ -44,6 +61,20 @@ const SimulationDetailPage: React.FC = () => {
         }
         const data: SimulationDetailsData = await response.json();
         setSimulationDetails(data);
+
+        if (data.concurrencyTimelineData) {
+          const transformedData: TickDataPoint[] = Object.entries(
+            data.concurrencyTimelineData
+          )
+          .map(([tickStr, power]) => ({
+            tick: parseInt(tickStr, 10),
+            power: power,
+          }))
+          .sort((a, b) => a.tick - b.tick) // Ensure data is sorted by tick
+          .slice(0, 96); // Show first 96 ticks (1 day)
+          setChartData(transformedData);
+        }
+
       } catch (err) {
         if (err instanceof Error) {
           setError(err.message);
@@ -65,6 +96,12 @@ const SimulationDetailPage: React.FC = () => {
     } catch {
       return 'Invalid Date';
     }
+  };
+  
+  const formatTickToHour = (tick: number) => {
+    const hour = Math.floor((tick % 96) / 4); // 96 ticks in a day, 4 ticks per hour
+    const minute = (tick % 4) * 15;
+    return `${String(hour).padStart(2, '0')}:${String(minute).padStart(2, '0')}`;
   };
 
   if (isLoading) {
@@ -181,19 +218,48 @@ const SimulationDetailPage: React.FC = () => {
         </div>
       </section>
 
-      {/* Placeholder for Charts (e.g., power demand over time, charger utilization map) */}
-      <section className="grid grid-cols-1 gap-6 lg:grid-cols-2">
-        <div className="rounded-lg bg-white p-6 shadow-lg dark:bg-gray-800">
-          <h2 className="mb-4 text-xl font-semibold text-gray-700 dark:text-gray-200">Power Demand Over Exemplary Day</h2>
+      {/* Chart for Power Demand Over Exemplary Day */}
+      <section className="mb-8 rounded-lg bg-white p-6 shadow-lg dark:bg-gray-800">
+        <h2 className="mb-4 text-xl font-semibold text-gray-700 dark:text-gray-200">
+          Power Demand Over First Day (First 96 Ticks)
+        </h2>
+        {chartData.length > 0 ? (
+          <ResponsiveContainer width="100%" height={400}>
+            <LineChart data={chartData} margin={{ top: 5, right: 20, left: 10, bottom: 5 }}>
+              <CartesianGrid strokeDasharray="3 3" />
+              <XAxis 
+                dataKey="tick" 
+                tickFormatter={formatTickToHour}
+                label={{ value: 'Time of Day', position: 'insideBottomRight', offset: -10, dy: 10 }}
+              />
+              <YAxis 
+                label={{ value: 'Power Demand (kW)', angle: -90, position: 'insideLeft', dx: -5 }}
+                allowDecimals={false} 
+              />
+              <Tooltip 
+                labelFormatter={formatTickToHour}
+                formatter={(value: number) => [`${value.toFixed(2)} kW`, 'Power Demand']}
+              />
+              <Legend />
+              <Line type="monotone" dataKey="power" stroke="#8884d8" strokeWidth={2} dot={false} name="Power Demand" />
+            </LineChart>
+          </ResponsiveContainer>
+        ) : (
           <div className="flex h-64 items-center justify-center text-gray-400 dark:text-gray-500">
-            <p>(Line chart placeholder - Data not yet available in this view)</p>
+            <p>
+              {simulationDetails?.concurrencyTimelineData 
+                ? 'No power demand data to display for the first day.' 
+                : 'Power demand timeline data not available for this simulation.'}
+            </p>
           </div>
-        </div>
-        <div className="rounded-lg bg-white p-6 shadow-lg dark:bg-gray-800">
-          <h2 className="mb-4 text-xl font-semibold text-gray-700 dark:text-gray-200">Charger Utilization Map (SVG)</h2>
-          <div className="flex h-64 items-center justify-center text-gray-400 dark:text-gray-500">
-            <p>(SVG Grid map placeholder - Data not yet available in this view)</p>
-          </div>
+        )}
+      </section>
+
+      {/* Placeholder for Charger Utilization Map */}
+      <section className="rounded-lg bg-white p-6 shadow-lg dark:bg-gray-800">
+        <h2 className="mb-4 text-xl font-semibold text-gray-700 dark:text-gray-200">Charger Utilization Map (SVG)</h2>
+        <div className="flex h-64 items-center justify-center text-gray-400 dark:text-gray-500">
+          <p>(SVG Grid map placeholder - Data not yet available in this view)</p>
         </div>
       </section>
 

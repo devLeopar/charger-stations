@@ -26,6 +26,7 @@ model Simulation {
   actualMaxPowerDemandKW Float
   theoreticalMaxPowerKW  Float
   concurrencyFactor      Float
+  concurrencyTimelineData Json?    // Added to store concurrency timeline for charts
   // For detailed tick-by-tick data or more complex results, JSON might still be useful
   // detailedResultsJson Json? 
 } 
